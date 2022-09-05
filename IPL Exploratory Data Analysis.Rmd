@@ -1,0 +1,251 @@
+---
+title: "IPL EDA"
+author: "Sreerag M S"
+date: "12/04/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+
+## Loading necessary packages
+
+```{r}
+library(tidyverse)
+```
+
+# Load the dataset
+
+```{r}
+ipl_matches <- read.csv("IPL Matches 2008-2020.csv")
+
+```
+
+
+## Lets take a look at what we have here
+
+```{r}
+str(ipl_matches)
+```
+Lets see first few rows
+
+```{r}
+head(ipl_matches,10)
+```
+
+Now for the last few matches
+```{r}
+tail(ipl_matches,10)
+```
+
+
+Lets look at the column names
+```{r}
+colnames(ipl_matches)
+```
+## Plotting a graph to see the number of matches won by each team
+
+```{r}
+plt <- ggplot(data = ipl_matches) +
+  geom_bar(mapping = aes(y = fct_infreq(winner), fill = winner))
+plot_data <- layer_data(plt)
+plt + annotate(geom = "text", label = plot_data$count, x = plot_data$x +5, y = plot_data$y ) +
+  scale_fill_manual(values = c("yellow","lightblue","#00008B","darkred","orange","red","orange","purple","blue","cyan","#D11D9B","magenta","#D1AB3E","#FF822A","grey")) +
+  labs(title = "Number of matches won by each team from 2008-2020", x = "Number of wins", y = "Team") +
+  guides(fill=guide_legend(title="Team"))
+  #geom_vline(xintercept = mean(plot_data$x),colour = "black")
+```
+
+
+## Now lets take a look at the number of loses by each team
+
+```{r}
+plt <- ggplot(data = ipl_matches) +
+  geom_bar(mapping = aes(y = fct_infreq(loser), fill = loser))
+plot_data <- layer_data(plt)
+plt + annotate(geom = "text", label = plot_data$count, x = plot_data$x +5, y = plot_data$y ) +
+  scale_fill_manual(values = c("yellow","lightblue","#00008B","darkred","orange","red","orange","purple","blue","cyan","#D11D9B","magenta","#D1AB3E","#FF822A","grey")) +
+  labs(title = "Number of matches lost by each team from 2008-2020", x = "Number of loses", y = "Team") +
+  guides(fill=guide_legend(title="Team"))
+```
+
+
+Lets see which players have been man of the match most number of times
+```{r}
+ipl_matches %>% 
+  count(player_of_match,sort = TRUE,name = "Number of MOTMs") %>% 
+  top_n(15)
+```
+
+Interesting... ABD who has got the most MOTMs has never won an IPL title along with Chris Gayle, Virat Kohli, Ajinkya Rahane and Amit Mishra.
+
+
+
+```{r}
+ipl_matches %>% 
+  count(toss_decision)
+```
+
+
+
+## Importing another dataset from the same time period(2008-2020) for further analysis
+
+```{r}
+ipl_ball_by_ball <- read.csv("IPL Ball-by-Ball 2008-2020.csv")
+```
+
+
+## Inspecting the dataset
+
+```{r}
+str(ipl_ball_by_ball)
+```
+
+```{r}
+colnames(ipl_ball_by_ball)
+```
+
+
+```{r}
+head(ipl_ball_by_ball)
+```
+
+```{r}
+tail(ipl_ball_by_ball)
+```
+
+The matches in the data seems to be in order but the overs are not in order.
+
+## Lets try to find some insights from this 
+
+```{r}
+  ggplot(data = ipl_ball_by_ball) +
+  geom_bar(mapping = aes(x = extras_type, fill = extras_type))
+```
+
+
+This graph doesnt work as most of the balls are not extras, so we drop the NAs.
+
+```{r}
+ipl_ball_by_ball %>% 
+  filter(!is.na(extras_type)) %>% 
+  ggplot(aes(x = extras_type,fill = extras_type)) +
+  geom_bar()
+
+```
+
+Still the value for penalty seems very small compared to others,lets try labelling it.
+
+
+```{r}
+ipl_ball_by_ball %>% 
+  filter(!is.na(extras_type)) %>% 
+  ggplot(aes(x = extras_type,fill = extras_type)) +
+  geom_bar() +
+  geom_text(aes(label = ..count..), stat = "count", vjust = -0.4) +
+  labs(title = "Number of extras from 2008-2020", x = "Type of extra", y = "Number of extras") +
+  guides(fill=guide_legend(title="Type of extra"))
+```
+
+And yes, there were 2 penalties.
+
+### Trying to create a circular bar chart of runs scored in each(20) over.
+
+
+```{r}
+over_data <- ipl_ball_by_ball %>% 
+  group_by(over) %>% 
+  summarise(runs_in_overs = sum(total_runs))
+
+over_data
+
+label_data <- over_data
+
+number_of_bar <- nrow(label_data)
+
+# calculate the ANGLE of the labels
+angle <-  90 - 360 * (label_data$over-0.5) /number_of_bar 
+
+# calculate the alignment of labels: right or left
+# If I am on the left part of the plot, my labels have currently an angle < -90
+label_data$hjust<-ifelse( angle < -90, 1, 0)
+
+# flip angle BY to make them readable
+label_data$angle<-ifelse(angle < -90, angle+180, angle)
+
+# Start the plot
+p <- ggplot(label_data, aes(x=over, y=runs_in_overs)) +       # Note that id is a factor. If x is numeric, there is some space between the first bar
+
+  # This add the bars with a blue color
+  geom_bar(stat="identity", fill=alpha("skyblue", 0.9)) +
+  
+  # Limits of the plot = very important. The negative value controls the size of the inner circle, the positive one is useful to add size over each bar
+  ylim(-10000,20000) +
+  
+  # Custom the theme: no axis title and no cartesian grid
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = unit(rep(-1,14), "cm")      # Adjust the margin to make in sort labels are not truncated!
+  ) +
+  
+  # This makes the coordinate polar instead of cartesian.
+  coord_polar(start = 0) +
+  
+  # Add the labels, using the label_data dataframe that we have created before
+  geom_text(data=label_data, aes(x=over, y=runs_in_overs+10, label=over, hjust=hjust), color="black", fontface="bold",alpha=0.6, size=2.5, angle= label_data$angle, inherit.aes = FALSE ) 
+ p
+```
+
+```{r}
+runs_split <- ipl_ball_by_ball %>% 
+  group_by(over) %>% 
+  summarise(total_batter_runs = sum(batsman_runs), total_extras = sum(extra_runs)) 
+
+runs_split_data <- data.frame(runs_split)
+runs_split_data
+
+
+ggplot(data = runs_split_data, aes(fill=total_batter_runs, y=total_batter_runs, x=over)) + 
+    geom_bar(position="stack", stat="identity")
+
+ggplot(data = runs_split_data, aes(fill=total_extras, y=total_extras, x=over)) + 
+    geom_bar(position="stack", stat="identity")
+```
+
+
+```{r}
+
+normalize <- function(x) {
+return ((x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)))}
+
+norm_runs_split <- as.data.frame(apply(runs_split_data[2:3], 2, normalize))
+norm_runs_split
+
+```
+
+
+
+```{r}
+overs_data <- ipl_ball_by_ball %>% 
+  group_by(over) %>% 
+  summarise(runs_in_overs = sum(total_runs))
+
+dataf<- data.frame(overs_data)
+dataf
+
+ggplot(dataf,aes(x=over,y=runs_in_overs,fill = over)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none") +
+  ylim(-5000,15000) +
+  coord_polar(start=0)
+```
+
